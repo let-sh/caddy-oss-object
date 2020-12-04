@@ -1,7 +1,6 @@
 package ossobject
 
 import (
-	"encoding/json"
 	"io"
 	"mime"
 	"net/http"
@@ -96,13 +95,11 @@ func (m OSSObject) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyh
 
 	bucketInstance, _ := ossClient.Bucket(bucket)
 
-	m.logger.Warn("request comes:",
-		zap.String("Endpoint", m.Endpoint),
-		// zap.String("AccessKeyID", m.AccessKeyID),
-		// zap.String("AccessKeySecret", m.AccessKeySecret),
-		zap.String("Bucket", m.Bucket),
-		zap.String("ObjectKey", m.ObjectKey),
-	)
+	// m.logger.Warn("request comes:",
+	// 	zap.String("Endpoint", m.Endpoint),
+	// 	zap.String("Bucket", m.Bucket),
+	// 	zap.String("ObjectKey", m.ObjectKey),
+	// )
 
 	var options []oss.Option
 
@@ -114,20 +111,19 @@ func (m OSSObject) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyh
 	}
 
 	result, err := bucketInstance.DoGetObject(&oss.GetObjectRequest{ObjectKey: objectKey}, options)
-	if err != nil {
+	if result == nil {
 		m.logger.Error("error:", zap.Error(err))
 		return next.ServeHTTP(w, r)
 	}
 	defer result.Response.Close()
 
-	reqHeaderJSON, _ := json.Marshal(r.Header)
-	resHeaderJSON, _ := json.Marshal(result.Response.Headers)
-
-	m.logger.Warn("result:",
-		zap.String("Request", string(reqHeaderJSON)),
-		zap.String("Response", string(resHeaderJSON)),
-		zap.Int("StatusCode", result.Response.StatusCode),
-	)
+	// reqHeaderJSON, _ := json.Marshal(r.Header)
+	// resHeaderJSON, _ := json.Marshal(result.Response.Headers)
+	// m.logger.Warn("result:",
+	// 	zap.String("Request", string(reqHeaderJSON)),
+	// 	zap.String("Response", string(resHeaderJSON)),
+	// 	zap.Int("StatusCode", result.Response.StatusCode),
+	// )
 
 	copyHeader(w.Header(), result.Response.Headers)
 	mtyp := mime.TypeByExtension(filepath.Ext(r.URL.Path))

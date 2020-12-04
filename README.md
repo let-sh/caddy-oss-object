@@ -8,11 +8,9 @@ This is an example Caddyfile:
 ```
 {
   order oss_object last
-	admin :2019 {
-	}
 }
 
-localhost {
+:1080 {
   oss_object {
 		endpoint oss-cn-shanghai.aliyuncs.com
 		access_key_id LTAI4**********CwTBwk
@@ -23,4 +21,5 @@ localhost {
 }
 ```
 
-All of the five arguments support placeholder.
+All of the five arguments support [Placeholder Conventions](https://caddyserver.com/docs/conventions#placeholders).
+
