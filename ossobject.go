@@ -1,12 +1,17 @@
 package ossobject
 
 import (
+	"crypto/hmac"
+	"crypto/sha1"
+	"encoding/base64"
+	"fmt"
+	"hash"
 	"io"
 	"mime"
 	"net/http"
 	"path/filepath"
+	"time"
 
-	"github.com/aliyun/aliyun-oss-go-sdk/oss"
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	"github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
@@ -75,6 +80,7 @@ func (m *OSSObject) Provision(ctx caddy.Context) error {
 
 // ServeHTTP implements caddyhttp.MiddlewareHandler.
 func (m OSSObject) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyhttp.Handler) error {
+	// TODO: support more method
 	if r.Method != http.MethodGet {
 		return next.ServeHTTP(w, r)
 	}
@@ -87,45 +93,27 @@ func (m OSSObject) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyh
 	bucket := repl.ReplaceAll(m.Bucket, "")
 	objectKey := repl.ReplaceAll(m.ObjectKey, "")
 
-	ossClient, _ := oss.New(
-		endpoint,
-		accessKeyID,
-		accessKeySecret,
-	)
+	canonicalizedResource := fmt.Sprintf("/%s/%s", bucket, objectKey)
+	date := time.Now().UTC().Format(http.TimeFormat)
 
-	bucketInstance, _ := ossClient.Bucket(bucket)
+	// TODO: support x-oss-* headers
+	signStr := "GET" + "\n\n\n" + date + "\n" + canonicalizedResource
+	h := hmac.New(func() hash.Hash { return sha1.New() }, []byte(accessKeySecret))
+	io.WriteString(h, signStr)
+	signedStr := base64.StdEncoding.EncodeToString(h.Sum(nil))
 
-	// m.logger.Warn("request comes:",
-	// 	zap.String("Endpoint", m.Endpoint),
-	// 	zap.String("Bucket", m.Bucket),
-	// 	zap.String("ObjectKey", m.ObjectKey),
-	// )
-
-	var options []oss.Option
-
-	for headerK, headerV := range r.Header {
-		// TODO: aliyun oss sdk only accept string header, so we can only pass one
-		if len(headerV) >= 1 {
-			options = append(options, oss.SetHeader(headerK, headerV[0]))
-		}
-	}
-
-	result, err := bucketInstance.DoGetObject(&oss.GetObjectRequest{ObjectKey: objectKey}, options)
-	if result == nil {
-		m.logger.Error("error:", zap.Error(err))
+	req, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("https://%s.%s/%s", bucket, endpoint, objectKey), nil)
+	copyHeader(req.Header, r.Header)
+	req.Header.Set("Authorization", fmt.Sprintf("OSS %s:%s", accessKeyID, signedStr))
+	req.Header.Set("Date", date)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
 		return next.ServeHTTP(w, r)
 	}
-	defer result.Response.Close()
+	defer res.Body.Close()
 
-	// reqHeaderJSON, _ := json.Marshal(r.Header)
-	// resHeaderJSON, _ := json.Marshal(result.Response.Headers)
-	// m.logger.Warn("result:",
-	// 	zap.String("Request", string(reqHeaderJSON)),
-	// 	zap.String("Response", string(resHeaderJSON)),
-	// 	zap.Int("StatusCode", result.Response.StatusCode),
-	// )
+	copyHeader(w.Header(), res.Header)
 
-	copyHeader(w.Header(), result.Response.Headers)
 	mtyp := mime.TypeByExtension(filepath.Ext(r.URL.Path))
 	if mtyp == "" {
 		// do not allow Go to sniff the content-type; see
@@ -136,9 +124,20 @@ func (m OSSObject) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyh
 		w.Header().Set("Content-Type", mtyp)
 	}
 
-	w.WriteHeader(result.Response.StatusCode)
-
-	io.Copy(w, result.Response)
+	if res.StatusCode >= 400 && res.StatusCode <= 600 {
+		// TODO: better handle 4XX 5XX
+		// w.Header().Set("Content-Length", "0")
+		w.WriteHeader(res.StatusCode)
+		io.Copy(w, res.Body)
+	} else if res.StatusCode >= 300 && res.StatusCode < 400 {
+		// TODO: better handle 3XX
+		// w.Header().Set("Content-Length", "0")
+		w.WriteHeader(res.StatusCode)
+		io.Copy(w, res.Body)
+	} else {
+		w.WriteHeader(res.StatusCode)
+		io.Copy(w, res.Body)
+	}
 
 	return nil
 }
