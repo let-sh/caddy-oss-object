@@ -10,7 +10,6 @@ import (
 	"mime"
 	"net/http"
 	"path/filepath"
-	"strconv"
 	"time"
 
 	"github.com/caddyserver/caddy/v2"
@@ -49,7 +48,6 @@ type OSSObject struct {
 	AccessKeySecret string `json:"access_key_secret,omitempty"`
 	Bucket          string `json:"bucket,omitempty"`
 	ObjectKey       string `json:"object_key,omitempty"`
-	SetStatusCode   int    `json:"set_status_code,omitempty"`
 
 	logger *zap.Logger
 }
@@ -134,24 +132,18 @@ func (m OSSObject) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyh
 		w.Header().Set("Content-Type", mtyp)
 	}
 
-	statusCode := res.StatusCode
-
-	if m.SetStatusCode >= 100 {
-		statusCode = m.SetStatusCode
-	}
-
 	if res.StatusCode >= 400 && res.StatusCode <= 600 {
 		// TODO: better handle 4XX 5XX
 		// w.Header().Set("Content-Length", "0")
-		w.WriteHeader(statusCode)
+		w.WriteHeader(res.StatusCode)
 		io.Copy(w, res.Body)
 	} else if res.StatusCode >= 300 && res.StatusCode < 400 {
 		// TODO: better handle 3XX
 		// w.Header().Set("Content-Length", "0")
-		w.WriteHeader(statusCode)
+		w.WriteHeader(res.StatusCode)
 		io.Copy(w, res.Body)
 	} else {
-		w.WriteHeader(statusCode)
+		w.WriteHeader(res.StatusCode)
 		io.Copy(w, res.Body)
 	}
 
@@ -209,18 +201,6 @@ func (m *OSSObject) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				objectKey := d.RemainingArgs()
 				if len(objectKey) == 1 {
 					m.ObjectKey = objectKey[0]
-				} else {
-					return d.ArgErr()
-				}
-			case "set_status_code":
-				setStatusCode := d.RemainingArgs()
-				if len(setStatusCode) == 1 {
-					i, err := strconv.Atoi(setStatusCode[0])
-					if err != nil {
-						m.SetStatusCode = 0
-					} else {
-						m.SetStatusCode = i
-					}
 				} else {
 					return d.ArgErr()
 				}
