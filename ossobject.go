@@ -122,7 +122,7 @@ func (m OSSObject) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyh
 
 	copyHeader(w.Header(), res.Header)
 
-	mtyp := mime.TypeByExtension(filepath.Ext(r.URL.Path))
+	mtyp := mime.TypeByExtension(filepath.Ext(objectKey))
 	if mtyp == "" {
 		// do not allow Go to sniff the content-type; see
 		// https://www.youtube.com/watch?v=8t8JYpt0egE
