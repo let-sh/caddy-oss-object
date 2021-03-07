@@ -1,8 +1,8 @@
-module github.com/farawaaay/caddy-oss-object
+module github.com/hzy/caddy-oss-object
 
-go 1.14
+go 1.15
 
 require (
-	github.com/caddyserver/caddy/v2 v2.0.0
+	github.com/caddyserver/caddy/v2 v2.3.0
 	go.uber.org/zap v1.14.1
 )
