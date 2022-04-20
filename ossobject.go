@@ -10,6 +10,7 @@ import (
 	"mime"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/caddyserver/caddy/v2"
@@ -49,7 +50,7 @@ type OSSObject struct {
 	Bucket          string `json:"bucket,omitempty"`
 	ObjectKey       string `json:"object_key,omitempty"`
 	StatusCode      int    `json:"status_code,omitempty"`
-	logger *zap.Logger
+	logger          *zap.Logger
 }
 
 // CaddyModule returns the Caddy module information.
@@ -100,7 +101,6 @@ func (m OSSObject) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyh
 	accessKeySecret := repl.ReplaceAll(m.AccessKeySecret, "")
 	bucket := repl.ReplaceAll(m.Bucket, "")
 	objectKey := repl.ReplaceAll(m.ObjectKey, "")
-	statusCode := repl.ReplaceAll(m.StatusCode, "")
 
 	canonicalizedResource := fmt.Sprintf("/%s/%s", bucket, objectKey)
 	date := time.Now().UTC().Format(http.TimeFormat)
@@ -136,15 +136,15 @@ func (m OSSObject) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyh
 	if res.StatusCode >= 400 && res.StatusCode <= 600 {
 		// TODO: better handle 4XX 5XX
 		// w.Header().Set("Content-Length", "0")
-		w.WriteHeader(statusCode)
+		w.WriteHeader(m.StatusCode)
 		io.Copy(w, res.Body)
 	} else if res.StatusCode >= 300 && res.StatusCode < 400 {
 		// TODO: better handle 3XX
 		// w.Header().Set("Content-Length", "0")
-		w.WriteHeader(statusCode)
+		w.WriteHeader(m.StatusCode)
 		io.Copy(w, res.Body)
 	} else {
-		w.WriteHeader(statusCode)
+		w.WriteHeader(m.StatusCode)
 		io.Copy(w, res.Body)
 	}
 
@@ -208,7 +208,11 @@ func (m *OSSObject) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 			case "status_code":
 				statusCode := d.RemainingArgs()
 				if len(statusCode) == 1 {
-					m.StatusCode = statusCode[0]
+					status, err := strconv.Atoi(statusCode[0])
+					if err != nil {
+						return err
+					}
+					m.StatusCode = status
 				} else {
 					m.StatusCode = 200
 				}
